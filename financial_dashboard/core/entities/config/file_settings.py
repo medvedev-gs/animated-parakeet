@@ -10,8 +10,8 @@ class FileSettings(IFileSettings):
     file_system: IFileSystem
     file_path: Path
 
-    def __post__init__(self) -> None:
-        if not issubclass(self.file_system, IFileSystem):
+    def __post_init__(self) -> None:
+        if not isinstance(self.file_system, IFileSystem):
             raise TypeError(
                 f"file_system type error: expected {IFileSystem.__name__}, got {type(self.file_system)}"
             )

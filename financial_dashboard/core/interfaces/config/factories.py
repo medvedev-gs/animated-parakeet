@@ -1,4 +1,5 @@
 import datetime as dt
+from pathlib import Path
 from abc import ABC, abstractmethod
 
 from financial_dashboard.core.interfaces.config.models import IDataSettings, IFileSettings, IParseSettings
@@ -29,9 +30,10 @@ class IParseSettingsFactory(ABC):
 
 class IFileSettingsFactory(ABC):
     @abstractmethod
+    @staticmethod
     def create(
-        self,
-        file_system: IFileSystem,
+        data_dir: Path,
+        file_name: Path,
         data_settings: IDataSettings
     ) -> IFileSettings:
         pass

@@ -177,7 +177,7 @@ class FileDirFactory:
             raise TypeError(f'root_path type error: expected {Path.__name__}, got {type(root_path)}')
         if not isinstance(data_settings, DataSettings):
             raise TypeError(f'data_settings type error: expected {DataSettings.__name__}, got {type(data_settings)}')
-        _registry = Dict[DataSourceType, Path] = {
+        _registry: Dict[DataSourceType, Path] = {
             DataSourceType.DAILY: Path('data/daily_data'),
             DataSourceType.QUIK: Path('data/quik_data'),
         }
