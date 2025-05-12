@@ -3,13 +3,23 @@ from pathlib import Path
 from typing import Protocol
 from typing import Optional, List, Dict
 
-from financial_dashboard.core.entities.contracts import DataSourceType, FuturesKey, DeliveryMonth
+
+class DataSourceTypeProtocol(Protocol):
+    value: str
+
+
+class FuturesKeyProtocol(Protocol):
+    value: str
+
+
+class DeliveryMonthProtocol(Protocol):
+    value: str
 
 
 class IDataSettings(Protocol):
-    source_type: DataSourceType
-    futures_key: FuturesKey
-    delivery_month: DeliveryMonth
+    source_type: DataSourceTypeProtocol
+    futures_key: FuturesKeyProtocol
+    delivery_month: DeliveryMonthProtocol
     year: dt.date
 
 

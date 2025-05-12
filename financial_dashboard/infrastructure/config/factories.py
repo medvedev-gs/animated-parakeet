@@ -10,13 +10,16 @@ from financial_dashboard.core.interfaces.config.models import IDataSettings
 from financial_dashboard.core.interfaces.config.models import IFileSettings
 from financial_dashboard.core.interfaces.config.models import IParseSettings
 
+from financial_dashboard.core.interfaces.filesystem import IFileSystem
+
+from financial_dashboard.core.entities.contracts import DataSourceType
+from financial_dashboard.core.entities.contracts import FuturesKey
+from financial_dashboard.core.entities.contracts import DeliveryMonth
+from financial_dashboard.core.entities.contracts import ColumnNames
+
 from financial_dashboard.core.entities.config.data_settings import DataSettings
 from financial_dashboard.core.entities.config.file_settings import FileSettings
 from financial_dashboard.core.entities.config.parse_settings import ParseSettings
-
-from financial_dashboard.core.interfaces.filesystem import IFileSystem
-
-from financial_dashboard.core.entities.contracts import DataSourceType, FuturesKey, DeliveryMonth, ColumnNames
 
 
 class DataSettingsFactory(IDataSettingsFactory):
@@ -36,7 +39,7 @@ class DataSettingsFactory(IDataSettingsFactory):
         )
 
 
-class ParseSettingsFactory(IParseSettingsFactory):
+class QuikParseSettingsMixin:
     @classmethod
     def _quik_config(cls) -> IParseSettings:
         return ParseSettings(
@@ -76,6 +79,8 @@ class ParseSettingsFactory(IParseSettingsFactory):
             chunksize=None
         )
 
+
+class DailyParseSettingsMixin:
     @classmethod
     def _daily_config(cls) -> IParseSettings:
         return ParseSettings(
@@ -131,11 +136,13 @@ class ParseSettingsFactory(IParseSettingsFactory):
             chunksize=None
         )
 
+
+class ParseSettingsFactory(IParseSettingsFactory, QuikParseSettingsMixin, DailyParseSettingsMixin):
     @staticmethod
     def create(data_settings: IDataSettings) -> IParseSettings:
         """Собирает ParseSettings из DataSettings"""
         if not isinstance(data_settings, IDataSettings):
-            raise TypeError(f'data_settings type error: expected {DataSettings.__name__}, got {type(data_settings)}')
+            raise TypeError(f'data_settings type error: expected {IDataSettings.__name__}, got {type(data_settings)}')
         _registry: Dict[DataSourceType, Callable[[], ParseSettings]] = {
             DataSourceType.QUIK: ParseSettingsFactory._quik_config,
             DataSourceType.DAILY: ParseSettingsFactory._daily_config,
@@ -145,19 +152,23 @@ class ParseSettingsFactory(IParseSettingsFactory):
         return _registry[data_settings.source_type]()
 
 
-class FileNameFactory:
+class QuikFileNameMixin:
     @classmethod
     def _quik_file_name(cls, data_settings: IDataSettings) -> Path:
         return Path(
             f'{data_settings.futures_key.value}{data_settings.delivery_month.value}{data_settings.year.strftime('%Y')[-1]}.csv'
         )
 
+
+class DailyFileNameMixin:
     @classmethod
     def _daily_file_name(cls, data_settings: IDataSettings) -> Path:
         return Path(
             f'{data_settings.futures_key.value}{data_settings.delivery_month.value}{data_settings.year.strftime('%Y')[-2:]}.csv'
         )
 
+
+class FileNameFactory(QuikFileNameMixin, DailyFileNameMixin):
     @staticmethod
     def create(data_settings: IDataSettings) -> Path:
         if not isinstance(data_settings, IDataSettings):
@@ -216,4 +227,4 @@ class FileSettingsFactory(IFileSettingsFactory):
             raise FileNotFoundError(
                 f"file_path not exists: {type(file_path)}"
             )
-        return FileSettings(file_system=file_system, file_path=file_path)
+        return FileSettings(file_path=file_path)
