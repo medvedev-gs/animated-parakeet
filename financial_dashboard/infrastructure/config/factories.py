@@ -2,14 +2,21 @@ import datetime as dt
 from pathlib import Path
 from typing import Dict, Callable
 
-from financial_dashboard.core.interfaces.filesystem import IFileSystem
 from financial_dashboard.core.interfaces.config.factories import IDataSettingsFactory
 from financial_dashboard.core.interfaces.config.factories import IFileSettingsFactory
 from financial_dashboard.core.interfaces.config.factories import IParseSettingsFactory
-from financial_dashboard.core.entities.contracts import DataSourceType, FuturesKey, DeliveryMonth, ColumnNames
+
+from financial_dashboard.core.interfaces.config.models import IDataSettings
+from financial_dashboard.core.interfaces.config.models import IFileSettings
+from financial_dashboard.core.interfaces.config.models import IParseSettings
+
 from financial_dashboard.core.entities.config.data_settings import DataSettings
 from financial_dashboard.core.entities.config.file_settings import FileSettings
 from financial_dashboard.core.entities.config.parse_settings import ParseSettings
+
+from financial_dashboard.core.interfaces.filesystem import IFileSystem
+
+from financial_dashboard.core.entities.contracts import DataSourceType, FuturesKey, DeliveryMonth, ColumnNames
 
 
 class DataSettingsFactory(IDataSettingsFactory):
@@ -19,7 +26,7 @@ class DataSettingsFactory(IDataSettingsFactory):
             futures_key: FuturesKey,
             delivery_month: DeliveryMonth,
             year: dt.date
-    ) -> DataSettings:
+    ) -> IDataSettings:
         """Собирает DataSettings"""
         return DataSettings(
             source_type=source_type,
@@ -31,7 +38,7 @@ class DataSettingsFactory(IDataSettingsFactory):
 
 class ParseSettingsFactory(IParseSettingsFactory):
     @classmethod
-    def _quik_config(cls) -> ParseSettings:
+    def _quik_config(cls) -> IParseSettings:
         return ParseSettings(
             sep=',',
             skip_rows=None,
@@ -70,7 +77,7 @@ class ParseSettingsFactory(IParseSettingsFactory):
         )
 
     @classmethod
-    def _daily_config(cls) -> ParseSettings:
+    def _daily_config(cls) -> IParseSettings:
         return ParseSettings(
             sep=',',
             skip_rows=2,
@@ -125,9 +132,9 @@ class ParseSettingsFactory(IParseSettingsFactory):
         )
 
     @staticmethod
-    def create(data_settings: DataSettings) -> ParseSettings:
+    def create(data_settings: IDataSettings) -> IParseSettings:
         """Собирает ParseSettings из DataSettings"""
-        if not isinstance(data_settings, DataSettings):
+        if not isinstance(data_settings, IDataSettings):
             raise TypeError(f'data_settings type error: expected {DataSettings.__name__}, got {type(data_settings)}')
         _registry: Dict[DataSourceType, Callable[[], ParseSettings]] = {
             DataSourceType.QUIK: ParseSettingsFactory._quik_config,
@@ -140,22 +147,22 @@ class ParseSettingsFactory(IParseSettingsFactory):
 
 class FileNameFactory:
     @classmethod
-    def _quik_file_name(cls, data_settings: DataSettings) -> Path:
+    def _quik_file_name(cls, data_settings: IDataSettings) -> Path:
         return Path(
             f'{data_settings.futures_key.value}{data_settings.delivery_month.value}{data_settings.year.strftime('%Y')[-1]}.csv'
         )
 
     @classmethod
-    def _daily_file_name(cls, data_settings: DataSettings) -> Path:
+    def _daily_file_name(cls, data_settings: IDataSettings) -> Path:
         return Path(
             f'{data_settings.futures_key.value}{data_settings.delivery_month.value}{data_settings.year.strftime('%Y')[-2:]}.csv'
         )
 
     @staticmethod
-    def create(data_settings: DataSettings) -> Path:
-        if not isinstance(data_settings, DataSettings):
-            raise TypeError(f'data_settings type error: expected {DataSettings.__name__}, got {type(data_settings)}')
-        _registry: Dict[DataSourceType, Callable[[DataSettings], Path]] = {
+    def create(data_settings: IDataSettings) -> Path:
+        if not isinstance(data_settings, IDataSettings):
+            raise TypeError(f'data_settings type error: expected {IDataSettings.__name__}, got {type(data_settings)}')
+        _registry: Dict[DataSourceType, Callable[[IDataSettings], Path]] = {
             DataSourceType.QUIK: FileNameFactory._quik_file_name,
             DataSourceType.DAILY: FileNameFactory._daily_file_name,
         }
@@ -169,14 +176,14 @@ class FileDirFactory:
     def create(
         file_system: IFileSystem,
         root_path: Path,
-        data_settings: DataSettings
+        data_settings: IDataSettings
     ) -> Path:
         if not issubclass(file_system, IFileSystem):
             raise TypeError(f'file_system type error: expected {IFileSystem.__name__}, got {type(file_system)}')
         if not isinstance(root_path, Path):
             raise TypeError(f'root_path type error: expected {Path.__name__}, got {type(root_path)}')
-        if not isinstance(data_settings, DataSettings):
-            raise TypeError(f'data_settings type error: expected {DataSettings.__name__}, got {type(data_settings)}')
+        if not isinstance(data_settings, IDataSettings):
+            raise TypeError(f'data_settings type error: expected {IDataSettings.__name__}, got {type(data_settings)}')
         _registry: Dict[DataSourceType, Path] = {
             DataSourceType.DAILY: Path('data/daily_data'),
             DataSourceType.QUIK: Path('data/quik_data'),
@@ -196,7 +203,7 @@ class FileSettingsFactory(IFileSettingsFactory):
             data_dir: Path,
             file_name: Path,
             file_system: IFileSystem
-    ) -> FileSettings:
+    ) -> IFileSettings:
         """Собирает FilePath из DataSettings"""
         if not isinstance(data_dir, Path):
             raise TypeError(f'data_dir type error: expected {Path.__name__}, got {type(data_dir)}')
@@ -205,4 +212,8 @@ class FileSettingsFactory(IFileSettingsFactory):
         if not issubclass(file_system, IFileSystem):
             raise TypeError(f'file_system type error: expected {IFileSystem.__name__}, got {type(file_system)}')
         file_path = file_system.build_path(data_dir, file_name)
+        if not file_system.exists(file_path):
+            raise FileNotFoundError(
+                f"file_path not exists: {type(file_path)}"
+            )
         return FileSettings(file_system=file_system, file_path=file_path)

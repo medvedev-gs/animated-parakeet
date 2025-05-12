@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Protocol
 from typing import Optional, List, Dict
 
-from financial_dashboard.core.interfaces.filesystem import IFileSystem
 from financial_dashboard.core.entities.contracts import DataSourceType, FuturesKey, DeliveryMonth
 
 
@@ -15,7 +14,6 @@ class IDataSettings(Protocol):
 
 
 class IFileSettings(Protocol):
-    file_system: IFileSystem
     file_path: Path
 
 

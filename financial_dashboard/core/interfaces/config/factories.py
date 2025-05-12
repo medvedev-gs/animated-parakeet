@@ -34,6 +34,6 @@ class IFileSettingsFactory(ABC):
     def create(
         data_dir: Path,
         file_name: Path,
-        data_settings: IDataSettings
+        file_system: IFileSystem
     ) -> IFileSettings:
         pass
