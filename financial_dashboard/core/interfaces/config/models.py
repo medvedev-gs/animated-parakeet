@@ -40,12 +40,12 @@ class IParseSettings(Protocol):
     chunksize: Optional[int]
 
 
+class IParseSettingsTemplate(Protocol):
+    _parse_settings: IParseSettings
+
+
 class IFileSettings(Protocol):
     file_path: Path
-
-
-class ISourceTypeParseSettings(Protocol):
-    _parse_settings: IParseSettings
 
 
 class IFileName(ABC):

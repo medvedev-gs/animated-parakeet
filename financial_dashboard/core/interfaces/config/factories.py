@@ -32,11 +32,14 @@ class IDataSettingsFactory(ABC):
 
 
 class IParseSettingsFactory(ABC):
+    def __init__(self, data_settings: IDataSettings) -> None:
+        if not isinstance(data_settings, IDataSettings):
+            raise TypeError(f'data_settings type error: expected {IDataSettings.__name__}, got {type(data_settings)}')
+        self.data_settings = data_settings
+
     @abstractmethod
-    @staticmethod
-    def create(
-        data_settings: IDataSettings
-    ) -> IParseSettings:
+    @property
+    def parse_settings(self) -> IParseSettings:
         pass
 
 

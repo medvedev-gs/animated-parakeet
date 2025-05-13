@@ -1,6 +1,5 @@
-import datetime as dt
 from pathlib import Path
-from typing import Dict, Type, Any
+from typing import Dict, Type, Any, Callable
 from enum import Enum
 
 from financial_dashboard.core.interfaces.config.factories import IDataSettingsFactory
@@ -8,8 +7,8 @@ from financial_dashboard.core.interfaces.config.factories import IParseSettingsF
 from financial_dashboard.core.interfaces.config.factories import IFileSettingsFactory
 
 from financial_dashboard.core.interfaces.config.models import IDataSettings
+from financial_dashboard.core.interfaces.config.models import IParseSettingsTemplate
 from financial_dashboard.core.interfaces.config.models import IParseSettings
-from financial_dashboard.core.interfaces.config.models import ISourceTypeParseSettings
 from financial_dashboard.core.interfaces.config.models import IFileSettings
 from financial_dashboard.core.interfaces.config.models import IFileName
 
@@ -39,6 +38,7 @@ class EnumValidatorMixin:
 
 class DataSettingsFactory(IDataSettingsFactory, EnumValidatorMixin):
     "Data Configuration Factory"
+
     _enum_types: Dict[str, Type[Enum]] = {
         "source_type": DataSourceType,
         "futures_key": FuturesKey,
@@ -56,7 +56,30 @@ class DataSettingsFactory(IDataSettingsFactory, EnumValidatorMixin):
         )
 
 
-class QuikParseSettings(ISourceTypeParseSettings):
+class ParseSettingsFactory(IParseSettingsFactory):
+    _registry: Dict[DataSourceType, Type[IParseSettingsTemplate]] = {}
+
+    @classmethod
+    def register(cls, source_type: DataSourceType) -> Callable[[Type[IParseSettingsTemplate]], Type[IParseSettingsTemplate]]:
+        if not isinstance(source_type, DataSourceType):
+            raise TypeError(f'source_type type error: expected {DataSourceType.__name__}, got {type(source_type)}')
+        def wrapper(subclass: Type[IParseSettingsTemplate]) -> Type[IParseSettingsTemplate]:
+            if not issubclass(subclass, IParseSettingsTemplate):
+                raise TypeError(f'subclass type error: expected {IParseSettingsTemplate.__name__},  got {type(subclass)}')
+            cls._registry[source_type] = subclass
+            return subclass
+        return wrapper
+
+    @property
+    def parse_settings(self) -> IParseSettings:
+        """Собирает ParseSettings из DataSettings"""
+        if not self.data_settings.source_type in ParseSettingsFactory._registry:
+            raise ValueError(f'unregistered source_type {self.data_settings.source_type.value}')
+        return ParseSettingsFactory._registry[self.data_settings.source_type]._parse_settings
+
+
+@ParseSettingsFactory.register(DataSourceType.QUIK)
+class QuikParseSettings(IParseSettingsTemplate):
     @property
     def _parse_settings(self) -> IParseSettings:
         return ParseSettings(
@@ -97,7 +120,8 @@ class QuikParseSettings(ISourceTypeParseSettings):
         )
 
 
-class DailyParseSettings(ISourceTypeParseSettings):
+@ParseSettingsFactory.register(DataSourceType.QUIK)
+class DailyParseSettings(IParseSettingsTemplate):
     @property
     def _parse_settings(self) -> IParseSettings:
         return ParseSettings(
@@ -152,25 +176,6 @@ class DailyParseSettings(ISourceTypeParseSettings):
             iterator=False,
             chunksize=None
         )
-
-
-class ParseSettingsFactory(IParseSettingsFactory):
-    _registry: Dict[DataSourceType, Type[ISourceTypeParseSettings]] = {
-        DataSourceType.QUIK: QuikParseSettings,
-        DataSourceType.DAILY: DailyParseSettings,
-    }
-
-    def __init__(self, data_settings: IDataSettings) -> None:
-        self.data_settings = data_settings
-
-    @property
-    def parse_settings(self) -> IParseSettings:
-        """Собирает ParseSettings из DataSettings"""
-        if not isinstance(self.data_settings, IDataSettings):
-            raise TypeError(f'data_settings type error: expected {IDataSettings.__name__}, got {type(self.data_settings)}')
-        if not self.data_settings.source_type in ParseSettingsFactory._registry:
-            raise ValueError(f'unregistered source_type {self.data_settings.source_type.value}')
-        return ParseSettingsFactory._registry[self.data_settings.source_type]._parse_settings
 
 
 class QuikFileName(IFileName):
