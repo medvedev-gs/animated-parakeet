@@ -6,21 +6,28 @@ from financial_dashboard.core.interfaces.config.models import DataSourceTypeProt
 from financial_dashboard.core.interfaces.config.models import FuturesKeyProtocol
 from financial_dashboard.core.interfaces.config.models import DeliveryMonthProtocol
 from financial_dashboard.core.interfaces.config.models import IDataSettings
-from financial_dashboard.core.interfaces.config.models import IFileSettings
 from financial_dashboard.core.interfaces.config.models import IParseSettings
+from financial_dashboard.core.interfaces.config.models import IFileSettings
 
 from financial_dashboard.core.interfaces.filesystem import IFileSystem
 
 
 class IDataSettingsFactory(ABC):
+    def __init__(
+            self,
+            source_type: DataSourceTypeProtocol,
+            futures_key: FuturesKeyProtocol,
+            delivery_month: DeliveryMonthProtocol,
+            year: dt.date
+    ) -> None:
+        self.source_type = source_type
+        self.futures_key = futures_key
+        self.delivery_month = delivery_month
+        self.year = year
+
     @abstractmethod
-    @staticmethod
-    def create(
-        source_type: DataSourceTypeProtocol,
-        futures_key: FuturesKeyProtocol,
-        delivery_month: DeliveryMonthProtocol,
-        year: dt.date
-    ) -> IDataSettings:
+    @property
+    def data_settings(self) -> IDataSettings:
         pass
 
 

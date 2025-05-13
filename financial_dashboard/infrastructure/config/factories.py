@@ -1,14 +1,17 @@
 import datetime as dt
 from pathlib import Path
-from typing import Dict, Callable
+from typing import Dict, Type, Any
+from enum import Enum
 
 from financial_dashboard.core.interfaces.config.factories import IDataSettingsFactory
-from financial_dashboard.core.interfaces.config.factories import IFileSettingsFactory
 from financial_dashboard.core.interfaces.config.factories import IParseSettingsFactory
+from financial_dashboard.core.interfaces.config.factories import IFileSettingsFactory
 
 from financial_dashboard.core.interfaces.config.models import IDataSettings
-from financial_dashboard.core.interfaces.config.models import IFileSettings
 from financial_dashboard.core.interfaces.config.models import IParseSettings
+from financial_dashboard.core.interfaces.config.models import ISourceTypeParseSettings
+from financial_dashboard.core.interfaces.config.models import IFileSettings
+from financial_dashboard.core.interfaces.config.models import IFileName
 
 from financial_dashboard.core.interfaces.filesystem import IFileSystem
 
@@ -18,30 +21,44 @@ from financial_dashboard.core.entities.contracts import DeliveryMonth
 from financial_dashboard.core.entities.contracts import ColumnNames
 
 from financial_dashboard.core.entities.config.data_settings import DataSettings
-from financial_dashboard.core.entities.config.file_settings import FileSettings
 from financial_dashboard.core.entities.config.parse_settings import ParseSettings
+from financial_dashboard.core.entities.config.file_settings import FileSettings
 
 
-class DataSettingsFactory(IDataSettingsFactory):
-    @staticmethod
-    def create(
-            source_type: DataSourceType,
-            futures_key: FuturesKey,
-            delivery_month: DeliveryMonth,
-            year: dt.date
-    ) -> IDataSettings:
-        """Собирает DataSettings"""
+class EnumValidatorMixin:
+    """Миксин для автоматической валидации enum'ов при присвоении атрибутов."""
+    _enum_types: Dict[str, Type[Enum]] = {}
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in self._enum_types and not isinstance(value, self._enum_types[name]):
+            raise TypeError(
+                f"Поле {name} должно быть типом {self._enum_types[name].__name__}, получено: {type(value)}"
+            )
+        super().__setattr__(name, value)
+
+
+class DataSettingsFactory(IDataSettingsFactory, EnumValidatorMixin):
+    "Data Configuration Factory"
+    _enum_types: Dict[str, Type[Enum]] = {
+        "source_type": DataSourceType,
+        "futures_key": FuturesKey,
+        "delivery_month": DeliveryMonth,
+    }
+
+    @property
+    def data_settings(self) -> IDataSettings:
+        """Creates DataSettings"""
         return DataSettings(
-            source_type=source_type,
-            futures_key=futures_key,
-            delivery_month=delivery_month,
-            year=year
+            source_type=self.source_type,
+            futures_key=self.futures_key,
+            delivery_month=self.delivery_month,
+            year=self.year
         )
 
 
-class QuikParseSettingsMixin:
-    @classmethod
-    def _quik_config(cls) -> IParseSettings:
+class QuikParseSettings(ISourceTypeParseSettings):
+    @property
+    def _parse_settings(self) -> IParseSettings:
         return ParseSettings(
             sep=',',
             skip_rows=None,
@@ -80,9 +97,9 @@ class QuikParseSettingsMixin:
         )
 
 
-class DailyParseSettingsMixin:
-    @classmethod
-    def _daily_config(cls) -> IParseSettings:
+class DailyParseSettings(ISourceTypeParseSettings):
+    @property
+    def _parse_settings(self) -> IParseSettings:
         return ParseSettings(
             sep=',',
             skip_rows=2,
@@ -137,93 +154,114 @@ class DailyParseSettingsMixin:
         )
 
 
-class ParseSettingsFactory(IParseSettingsFactory, QuikParseSettingsMixin, DailyParseSettingsMixin):
-    @staticmethod
-    def create(data_settings: IDataSettings) -> IParseSettings:
+class ParseSettingsFactory(IParseSettingsFactory):
+    _registry: Dict[DataSourceType, Type[ISourceTypeParseSettings]] = {
+        DataSourceType.QUIK: QuikParseSettings,
+        DataSourceType.DAILY: DailyParseSettings,
+    }
+
+    def __init__(self, data_settings: IDataSettings) -> None:
+        self.data_settings = data_settings
+
+    @property
+    def parse_settings(self) -> IParseSettings:
         """Собирает ParseSettings из DataSettings"""
-        if not isinstance(data_settings, IDataSettings):
-            raise TypeError(f'data_settings type error: expected {IDataSettings.__name__}, got {type(data_settings)}')
-        _registry: Dict[DataSourceType, Callable[[], ParseSettings]] = {
-            DataSourceType.QUIK: ParseSettingsFactory._quik_config,
-            DataSourceType.DAILY: ParseSettingsFactory._daily_config,
-        }
-        if not data_settings.source_type in _registry:
-            raise ValueError(f'unregistered source_type {data_settings.source_type.value}')
-        return _registry[data_settings.source_type]()
+        if not isinstance(self.data_settings, IDataSettings):
+            raise TypeError(f'data_settings type error: expected {IDataSettings.__name__}, got {type(self.data_settings)}')
+        if not self.data_settings.source_type in ParseSettingsFactory._registry:
+            raise ValueError(f'unregistered source_type {self.data_settings.source_type.value}')
+        return ParseSettingsFactory._registry[self.data_settings.source_type]._parse_settings
 
 
-class QuikFileNameMixin:
-    @classmethod
-    def _quik_file_name(cls, data_settings: IDataSettings) -> Path:
+class QuikFileName(IFileName):
+    @property
+    def _file_name(self) -> Path:
         return Path(
-            f'{data_settings.futures_key.value}{data_settings.delivery_month.value}{data_settings.year.strftime('%Y')[-1]}.csv'
+            f'{self.data_settings.futures_key.value}{self.data_settings.delivery_month.value}{self.data_settings.year.strftime('%Y')[-1]}.csv'
         )
 
 
-class DailyFileNameMixin:
-    @classmethod
-    def _daily_file_name(cls, data_settings: IDataSettings) -> Path:
+class DailyFileName(IFileName):
+    @property
+    def _file_name(self) -> Path:
         return Path(
-            f'{data_settings.futures_key.value}{data_settings.delivery_month.value}{data_settings.year.strftime('%Y')[-2:]}.csv'
+            f'{self.data_settings.futures_key.value}{self.data_settings.delivery_month.value}{self.data_settings.year.strftime('%Y')[-2:]}.csv'
         )
 
 
-class FileNameFactory(QuikFileNameMixin, DailyFileNameMixin):
-    @staticmethod
-    def create(data_settings: IDataSettings) -> Path:
-        if not isinstance(data_settings, IDataSettings):
-            raise TypeError(f'data_settings type error: expected {IDataSettings.__name__}, got {type(data_settings)}')
-        _registry: Dict[DataSourceType, Callable[[IDataSettings], Path]] = {
-            DataSourceType.QUIK: FileNameFactory._quik_file_name,
-            DataSourceType.DAILY: FileNameFactory._daily_file_name,
-        }
-        if not data_settings.source_type in _registry:
-            raise ValueError(f'unregistered source_type: {data_settings.source_type.value}')
-        return _registry[data_settings.source_type](data_settings)
+class FileNameFactory:
+    _registry: Dict[DataSourceType, Type[IFileName]] = {
+        DataSourceType.QUIK: QuikFileName,
+        DataSourceType.DAILY: DailyFileName,
+    }
+
+    def __init__(self, data_settings: IDataSettings) -> None:
+        self.data_settings = data_settings
+
+    @property
+    def file_name(self) -> Path:
+        if not isinstance(self.data_settings, IDataSettings):
+            raise TypeError(f'data_settings type error: expected {IDataSettings.__name__}, got {type(self.data_settings)}')
+        if not self.data_settings.source_type in FileNameFactory._registry:
+            raise ValueError(f'unregistered source_type: {self.data_settings.source_type.value}')
+        return FileNameFactory._registry[self.data_settings.source_type](data_settings=self.data_settings)._file_name
 
 
 class FileDirFactory:
-    @staticmethod
-    def create(
-        file_system: IFileSystem,
-        root_path: Path,
-        data_settings: IDataSettings
-    ) -> Path:
-        if not issubclass(file_system, IFileSystem):
-            raise TypeError(f'file_system type error: expected {IFileSystem.__name__}, got {type(file_system)}')
-        if not isinstance(root_path, Path):
-            raise TypeError(f'root_path type error: expected {Path.__name__}, got {type(root_path)}')
-        if not isinstance(data_settings, IDataSettings):
-            raise TypeError(f'data_settings type error: expected {IDataSettings.__name__}, got {type(data_settings)}')
-        _registry: Dict[DataSourceType, Path] = {
-            DataSourceType.DAILY: Path('data/daily_data'),
-            DataSourceType.QUIK: Path('data/quik_data'),
-        }
-        if not data_settings.source_type in _registry:
-            raise ValueError(f'unregistered source_type: {data_settings.source_type.value}')
-        return file_system.build_path(
-            root_path,
-            _registry[data_settings.source_type],
-            data_settings.futures_key.value
+    _registry: Dict[DataSourceType, Path] = {
+        DataSourceType.DAILY: Path('data/daily_data'),
+        DataSourceType.QUIK: Path('data/quik_data'),
+    }
+
+    def __init__(
+            self,
+            file_system: IFileSystem,
+            root_path: Path,
+            data_settings: IDataSettings
+    ) -> None:
+        self.file_system = file_system
+        self.root_path = root_path
+        self.data_settings = data_settings
+
+    @property
+    def file_dir(self) -> Path:
+        if not issubclass(self.file_system, IFileSystem):
+            raise TypeError(f'file_system type error: expected {IFileSystem.__name__}, got {type(self.file_system)}')
+        if not isinstance(self.root_path, Path):
+            raise TypeError(f'root_path type error: expected {Path.__name__}, got {type(self.root_path)}')
+        if not isinstance(self.data_settings, IDataSettings):
+            raise TypeError(f'data_settings type error: expected {IDataSettings.__name__}, got {type(self.data_settings)}')
+        if not self.data_settings.source_type in FileDirFactory._registry:
+            raise ValueError(f'unregistered source_type: {self.data_settings.source_type.value}')
+        return self.file_system.build_path(
+            self.root_path,
+            FileDirFactory._registry[self.data_settings.source_type],
+            self.data_settings.futures_key.value
         )
 
 
 class FileSettingsFactory(IFileSettingsFactory):
-    @staticmethod
-    def create(
-            data_dir: Path,
-            file_name: Path,
+    def __init__(
+            self,
+            data_dir_factory: FileDirFactory,
+            file_name_factory: FileNameFactory,
             file_system: IFileSystem
-    ) -> IFileSettings:
+    ) -> None:
+        self.data_dir_factory = data_dir_factory
+        self.file_name_factory = file_name_factory
+        self.file_system = file_system
+
+    @property
+    def create(self) -> IFileSettings:
         """Собирает FilePath из DataSettings"""
-        if not isinstance(data_dir, Path):
-            raise TypeError(f'data_dir type error: expected {Path.__name__}, got {type(data_dir)}')
-        if not isinstance(file_name, Path):
-            raise TypeError(f'file_name type error: expected {Path.__name__}, got {type(file_name)}')
-        if not issubclass(file_system, IFileSystem):
-            raise TypeError(f'file_system type error: expected {IFileSystem.__name__}, got {type(file_system)}')
-        file_path = file_system.build_path(data_dir, file_name)
-        if not file_system.exists(file_path):
+        if not isinstance(self.data_dir_factory, FileDirFactory):
+            raise TypeError(f'data_dir type error: expected {FileDirFactory.__name__}, got {type(self.data_dir_factory)}')
+        if not isinstance(self.file_name_factory, FileNameFactory):
+            raise TypeError(f'file_name type error: expected {FileNameFactory.__name__}, got {type(self.file_name_factory)}')
+        if not issubclass(self.file_system, IFileSystem):
+            raise TypeError(f'file_system type error: expected {IFileSystem.__name__}, got {type(self.file_system)}')
+        file_path = self.file_system.build_path(self.data_dir_factory.file_dir, self.file_name_factory.file_name)
+        if not self.file_system.exists(file_path):
             raise FileNotFoundError(
                 f"file_path not exists: {type(file_path)}"
             )

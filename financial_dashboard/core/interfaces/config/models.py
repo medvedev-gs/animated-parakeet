@@ -1,7 +1,7 @@
 import datetime as dt
 from pathlib import Path
-from typing import Protocol
-from typing import Optional, List, Dict
+from abc import ABC, abstractmethod
+from typing import Optional, List, Dict,Protocol
 
 
 class DataSourceTypeProtocol(Protocol):
@@ -23,10 +23,6 @@ class IDataSettings(Protocol):
     year: dt.date
 
 
-class IFileSettings(Protocol):
-    file_path: Path
-
-
 class IParseSettings(Protocol):
     sep: str
     skip_rows: Optional[int]
@@ -42,3 +38,21 @@ class IParseSettings(Protocol):
     index_col: Optional[str]
     iterator: bool
     chunksize: Optional[int]
+
+
+class IFileSettings(Protocol):
+    file_path: Path
+
+
+class ISourceTypeParseSettings(Protocol):
+    _parse_settings: IParseSettings
+
+
+class IFileName(ABC):
+    def __init__(self, data_settings: IDataSettings) -> None:
+        self.data_settings = data_settings
+
+    @property
+    @abstractmethod
+    def _file_name(self) -> Path:
+        ...
