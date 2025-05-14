@@ -1,6 +1,13 @@
 from enum import Enum
 
 
+class DTypes:
+    STRING: str = 'string'
+    CATEGORY: str = 'category'
+    INT64: str = 'Int64'
+    FLOAT64: str = 'float64'
+
+
 class ColumnNames:
     TICKER: str = 'Ticker'
     PER: str = 'Per'

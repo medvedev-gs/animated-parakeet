@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Dict, Type, Any, Callable
 from enum import Enum
 
@@ -10,7 +9,6 @@ from financial_dashboard.core.interfaces.config.models import IDataSettings
 from financial_dashboard.core.interfaces.config.models import IParseSettingsTemplate
 from financial_dashboard.core.interfaces.config.models import IParseSettings
 from financial_dashboard.core.interfaces.config.models import IFileSettings
-from financial_dashboard.core.interfaces.config.models import IFileName
 
 from financial_dashboard.core.interfaces.filesystem import IFileSystem
 
@@ -18,6 +16,7 @@ from financial_dashboard.core.entities.contracts import DataSourceType
 from financial_dashboard.core.entities.contracts import FuturesKey
 from financial_dashboard.core.entities.contracts import DeliveryMonth
 from financial_dashboard.core.entities.contracts import ColumnNames
+from financial_dashboard.core.entities.contracts import DTypes
 
 from financial_dashboard.core.entities.config.data_settings import DataSettings
 from financial_dashboard.core.entities.config.parse_settings import ParseSettings
@@ -48,12 +47,14 @@ class DataSettingsFactory(IDataSettingsFactory, EnumValidatorMixin):
     @property
     def data_settings(self) -> IDataSettings:
         """Creates DataSettings"""
-        return DataSettings(
-            source_type=self.source_type,
-            futures_key=self.futures_key,
-            delivery_month=self.delivery_month,
-            year=self.year
-        )
+        if self._data_settings_cache is None:
+            self._data_settings_cache = DataSettings(
+                source_type=self.source_type,
+                futures_key=self.futures_key,
+                delivery_month=self.delivery_month,
+                year=self.year
+            )
+        return self._data_settings_cache
 
 
 class ParseSettingsFactory(IParseSettingsFactory):
@@ -75,13 +76,13 @@ class ParseSettingsFactory(IParseSettingsFactory):
         """Собирает ParseSettings из DataSettings"""
         if not self.data_settings.source_type in ParseSettingsFactory._registry:
             raise ValueError(f'unregistered source_type {self.data_settings.source_type.value}')
-        return ParseSettingsFactory._registry[self.data_settings.source_type]._parse_settings
+        return ParseSettingsFactory._registry[self.data_settings.source_type].parse_settings
 
 
 @ParseSettingsFactory.register(DataSourceType.QUIK)
 class QuikParseSettings(IParseSettingsTemplate):
     @property
-    def _parse_settings(self) -> IParseSettings:
+    def parse_settings(self) -> IParseSettings:
         return ParseSettings(
             sep=',',
             skip_rows=None,
@@ -98,15 +99,15 @@ class QuikParseSettings(IParseSettingsTemplate):
                 ColumnNames.VOL
             ],
             dtypes={
-                ColumnNames.TICKER: 'category',
-                ColumnNames.PER: 'Int64',
-                ColumnNames.DATE: 'string',
-                ColumnNames.TIME: 'string',
-                ColumnNames.OPEN: 'float64',
-                ColumnNames.HIGH: 'float64',
-                ColumnNames.LOW: 'float64',
-                ColumnNames.CLOSE: 'float64',
-                ColumnNames.VOL: 'Int64'
+                ColumnNames.TICKER: DTypes.CATEGORY,
+                ColumnNames.PER: DTypes.INT64,
+                ColumnNames.DATE: DTypes.STRING,
+                ColumnNames.TIME: DTypes.STRING,
+                ColumnNames.OPEN: DTypes.FLOAT64,
+                ColumnNames.HIGH: DTypes.FLOAT64,
+                ColumnNames.LOW: DTypes.FLOAT64,
+                ColumnNames.CLOSE: DTypes.FLOAT64,
+                ColumnNames.VOL: DTypes.INT64
             },
             na_values=[''],
             datetime_cols=[ColumnNames.DATE, ColumnNames.TIME],
@@ -123,7 +124,7 @@ class QuikParseSettings(IParseSettingsTemplate):
 @ParseSettingsFactory.register(DataSourceType.QUIK)
 class DailyParseSettings(IParseSettingsTemplate):
     @property
-    def _parse_settings(self) -> IParseSettings:
+    def parse_settings(self) -> IParseSettings:
         return ParseSettings(
             sep=',',
             skip_rows=2,
@@ -175,73 +176,6 @@ class DailyParseSettings(IParseSettingsTemplate):
             index_col=None,
             iterator=False,
             chunksize=None
-        )
-
-
-class QuikFileName(IFileName):
-    @property
-    def _file_name(self) -> Path:
-        return Path(
-            f'{self.data_settings.futures_key.value}{self.data_settings.delivery_month.value}{self.data_settings.year.strftime('%Y')[-1]}.csv'
-        )
-
-
-class DailyFileName(IFileName):
-    @property
-    def _file_name(self) -> Path:
-        return Path(
-            f'{self.data_settings.futures_key.value}{self.data_settings.delivery_month.value}{self.data_settings.year.strftime('%Y')[-2:]}.csv'
-        )
-
-
-class FileNameFactory:
-    _registry: Dict[DataSourceType, Type[IFileName]] = {
-        DataSourceType.QUIK: QuikFileName,
-        DataSourceType.DAILY: DailyFileName,
-    }
-
-    def __init__(self, data_settings: IDataSettings) -> None:
-        self.data_settings = data_settings
-
-    @property
-    def file_name(self) -> Path:
-        if not isinstance(self.data_settings, IDataSettings):
-            raise TypeError(f'data_settings type error: expected {IDataSettings.__name__}, got {type(self.data_settings)}')
-        if not self.data_settings.source_type in FileNameFactory._registry:
-            raise ValueError(f'unregistered source_type: {self.data_settings.source_type.value}')
-        return FileNameFactory._registry[self.data_settings.source_type](data_settings=self.data_settings)._file_name
-
-
-class FileDirFactory:
-    _registry: Dict[DataSourceType, Path] = {
-        DataSourceType.DAILY: Path('data/daily_data'),
-        DataSourceType.QUIK: Path('data/quik_data'),
-    }
-
-    def __init__(
-            self,
-            file_system: IFileSystem,
-            root_path: Path,
-            data_settings: IDataSettings
-    ) -> None:
-        self.file_system = file_system
-        self.root_path = root_path
-        self.data_settings = data_settings
-
-    @property
-    def file_dir(self) -> Path:
-        if not issubclass(self.file_system, IFileSystem):
-            raise TypeError(f'file_system type error: expected {IFileSystem.__name__}, got {type(self.file_system)}')
-        if not isinstance(self.root_path, Path):
-            raise TypeError(f'root_path type error: expected {Path.__name__}, got {type(self.root_path)}')
-        if not isinstance(self.data_settings, IDataSettings):
-            raise TypeError(f'data_settings type error: expected {IDataSettings.__name__}, got {type(self.data_settings)}')
-        if not self.data_settings.source_type in FileDirFactory._registry:
-            raise ValueError(f'unregistered source_type: {self.data_settings.source_type.value}')
-        return self.file_system.build_path(
-            self.root_path,
-            FileDirFactory._registry[self.data_settings.source_type],
-            self.data_settings.futures_key.value
         )
 
 

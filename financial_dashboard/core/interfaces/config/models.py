@@ -1,6 +1,5 @@
 import datetime as dt
 from pathlib import Path
-from abc import ABC, abstractmethod
 from typing import Optional, List, Dict,Protocol
 
 
@@ -41,18 +40,8 @@ class IParseSettings(Protocol):
 
 
 class IParseSettingsTemplate(Protocol):
-    _parse_settings: IParseSettings
+    parse_settings: IParseSettings
 
 
 class IFileSettings(Protocol):
     file_path: Path
-
-
-class IFileName(ABC):
-    def __init__(self, data_settings: IDataSettings) -> None:
-        self.data_settings = data_settings
-
-    @property
-    @abstractmethod
-    def _file_name(self) -> Path:
-        ...
