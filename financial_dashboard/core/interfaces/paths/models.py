@@ -1,14 +1,23 @@
-from abc import ABC, abstractmethod
 from pathlib import Path
+from abc import ABC, abstractmethod
 
-from financial_dashboard.core.interfaces.config.models import IDataSettings
+
+class IFileNameGenerator(ABC):
+    @abstractmethod
+    @property
+    def file_name(self) -> Path:
+        ...
 
 
-class IFileName(ABC):
-    def __init__(self, data_settings: IDataSettings) -> None:
-        self.data_settings = data_settings
-
+class IFileDirGenerator(ABC):
     @property
     @abstractmethod
-    def file_name(self) -> Path:
+    def file_dir(self) -> Path:
+        ...
+
+
+class IFilePathGenerator(ABC):
+    @property
+    @abstractmethod
+    def file_path(self) -> Path:
         ...

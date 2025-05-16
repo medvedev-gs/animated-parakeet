@@ -2,6 +2,7 @@ from typing import Optional
 import datetime as dt
 from abc import ABC
 
+
 class BaseDateTimeRange(ABC):
     @property
     @abstractmethod

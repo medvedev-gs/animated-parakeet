@@ -1,5 +1,4 @@
 import datetime as dt
-from pathlib import Path
 from typing import Optional, List, Dict,Protocol
 
 
@@ -41,7 +40,3 @@ class IParseSettings(Protocol):
 
 class IParseSettingsTemplate(Protocol):
     parse_settings: IParseSettings
-
-
-class IFileSettings(Protocol):
-    file_path: Path

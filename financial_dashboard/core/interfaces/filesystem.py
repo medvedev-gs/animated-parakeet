@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+
 class IFileSystem(ABC):
     @abstractmethod
     def exists(self, path: Path) -> bool:
